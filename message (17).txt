@@ -1,0 +1,1001 @@
+if not engine then
+  getgenv().engine = loadstring(game:HttpGet("https://pastebin.com/raw/biUKRzrT"))()
+end
+
+local wp = workspace:FindFirstChild("WaypointPart")
+while wp do wait()
+  wp:Destroy()
+  wp = workspace:FindFirstChild("WaypointPart")
+end
+
+local cool_sound = "6783714255"
+local coregui = game:GetService('CoreGui')
+local players = game:GetService('Players')
+local player = players.LocalPlayer.Character.HumanoidRootPart
+local replicated = game:GetService('ReplicatedStorage')
+local specs = require(game:GetService('ReplicatedStorage').Module.UI).CircleAction.Specs
+local validcars = {
+  "Camaro",
+  "Heli",
+  "EscapeBot"
+}
+
+local carteleports = {}
+if workspace:FindFirstChild("Casino") then
+  carteleports = {
+    Casino = workspace.Casino.Computers.Computer.Display,
+    Jewelry = workspace.Jewelrys:GetChildren()[1].Teleport,
+    Museum = workspace.Museum.Region.Part,
+    Powerplant = workspace.PowerPlant.Box2,
+    Tomb = workspace.RobberyTomb.Entrance.Buttons['1'].Button.Part,
+    Bank = workspace.Banks:GetChildren()[1].Layout:GetChildren()[1].Money,
+    Mansion = workspace.MansionRobbery.NPCSpawns.BossDeskSpawn,
+    Trading = workspace.TeleportRegions.Part
+  }
+end
+
+local targetp
+local selectedteleport
+local ccar
+local relativePosition = Vector3.new(0, 0, 0)
+local name = "Secret Project"
+local waypointsfolder
+local poslabel
+local waypoints = {}
+local waypointmanage = {}
+local waypointparts = {}
+
+function round(num, places)
+  return math.floor(num * (10 ^ places)) / (10 ^ places)
+end
+
+function reload()
+  if coregui.imgui2:FindFirstChild("Main") then
+    coregui.imgui2:FindFirstChild("Main"):Destroy()
+  end
+end
+
+function spawncar(name)
+  local args = {
+    [1] = "Chassis",
+    [2] = name
+  }  
+
+  game:GetService('ReplicatedStorage').GarageSpawnVehicle:FireServer(unpack(args))
+end
+
+function kickcar(name, loca)
+  local ReplicatedStorage = game:GetService('ReplicatedStorage')
+  local VehicleModule = require(ReplicatedStorage.Game.Vehicle)
+  local Vehicle = VehicleModule.GetLocalVehicleModel()
+  local Vehicles = workspace.Vehicles:GetChildren()
+  local Players = game:GetService('Players')
+  local Target = Players[name]
+
+  function findplayercar(player)
+    for _, v in Vehicles do
+      if v:FindFirstChild("Seat") then
+        for _, v2 in v:GetChildren() do
+          if v2.Name == "Seat" or v2.Name == "Passenger" then
+            if v2.PlayerName.Value == player.Name then
+              return v
+            end
+          end
+        end
+      end
+    end
+  end
+
+  local RopePull = Vehicle.Preset.Crane.MetalHook
+  local Rope = Vehicle.Preset.Crane.Arm.MetalArm.RopeConstraint
+
+  local TargetVehicle = findplayercar(Target)
+
+  Rope.Length = 10000
+  Rope.WinchEnabled = true
+  while not RopePull.AttachedTo.Value do task.wait()
+    RopePull.CFrame = TargetVehicle.PrimaryPart.CFrame * CFrame.new(0, 1000, 0)
+    RopePull.ReqLink:FireServer(TargetVehicle, Vector3.new(0, 1000, 0))
+  end
+
+  for i = 1, 64 do task.wait()
+   local NewLocation = loca.CFrame
+    Target.Character:PivotTo(NewLocation)
+  end
+
+  RopePull.CFrame = Vehicle.PrimaryPart.CFrame
+  RopePull.ReqUnlink:FireServer(TargetVehicle, Vector3.new(0, 1000, 0))
+  Rope.WinchEnabled = false
+  Rope.Length = 5
+end
+
+function GetClosestCar()
+  local data
+  local range = 5000
+  for _, v in specs do
+    if v.IsVehicle and table.find(validcars, v.ValidRoot.Name) and (v.Name == "Enter Driver" or v.Name == "Hijack") then
+      magnitude = (v.ValidRoot.Seat.Position - player.Position).Magnitude
+      if magnitude < range then
+        range = magnitude
+        data = v
+      end
+    end
+  end
+
+  return data
+end
+
+reload()
+wait(0.1)
+
+local tpscript = [[
+
+local wplayer = game:GetService('Players').LocalPlayer.Character
+local state = wplayer.Humanoid:GetState()
+for i, v in waypoints do
+  local point = Vector3.new(v[1], v[2], v[3])
+  local TweenService = game:GetService('TweenService')
+  wplayer.Humanoid:ChangeState(11)
+  tween = TweenService:Create(player.HumanoidRootPart, TweenInfo.new((wplayer.HumanoidRootPart.Position - point).Magnitude / 100, Enum.EasingStyle.Linear), {CFrame = CFrame.new(point)})
+  tween:Play()
+  tween.Completed:Wait()
+end
+
+wplayer.Humanoid:ChangeState(state)]]
+
+function buildscript()
+  local start = "local waypoints = {"
+  local script = start
+  for i, v in waypoints do
+    local w = ""
+    if script ~= start then
+      w = ", "
+    end
+    
+    w = w.. "{"
+    w = w.. tostring(round(v.X, 4)).. ", "
+    w = w.. tostring(round(v.Y, 4)).. ", "
+    w = w.. tostring(round(v.Z, 4)).. ""
+    w = w.. "}"
+    script = script.. w
+  end
+
+  script = script.. "}"
+  return script.. tpscript
+end
+
+function addwaypoint(vector)
+  local index = #waypoints + 1
+  waypoints[index] = vector
+  x = math.floor(vector.X)
+  y = math.floor(vector.Y)
+  z = math.floor(vector.Z)
+  local newfolder = waypointsfolder.new("folder", {
+    text = x.. ", ".. y.. ", ".. z
+  })
+
+  local delbutton = newfolder.new("button", {
+    text = "Delete"
+  })
+  
+  waypointmanage[index] = newfolder
+  local part = Instance.new("Part", workspace)
+  part.Name = "WaypointPart"
+  part.CFrame = CFrame.new(vector)
+  part.Size = Vector3.new(4, 8, 4)
+  part.Anchored = true
+  part.CanCollide = false
+  part.Transparency = 1
+  waypointparts[index] = part
+
+  local selection = Instance.new("SelectionBox", part)
+  selection.Adornee = part
+
+  delbutton.event:Connect(function()
+    table.remove(waypoints, index)
+    newfolder.Destroy()
+    table.remove(waypointmanage, index)
+    part:Destroy()
+    table.remove(waypointparts, index)
+  end)
+end
+
+function delwaypoint()
+  table.remove(waypoints, #waypoints)
+  waypointmanage[#waypointmanage].Destroy()
+  table.remove(waypointmanage, #waypointmanage)
+  waypointparts[#waypointparts]:Destroy()
+  table.remove(waypointparts, #waypointparts)
+end
+
+local window = engine.new({
+  text = name,
+  size = Vector2.new(400, 300)
+})
+
+window.open()
+local position = window.new({
+  text = "Debug Position"
+})
+
+local tptab = window.new({
+  text = "Features"
+})
+
+local cartab = window.new({
+  text = "Cars"
+})
+
+local kicktab2 = window.new({
+  text = "FE Players"
+})
+
+local kicktab = kicktab2.new("folder", {
+  text = "Tow Truck Exploits"
+})
+
+kicktab.open()
+kicktab2.show()
+
+local playerdrop = kicktab.new("dropdown", {
+  text = "Select Player"
+})
+
+local playerdata = {}
+for _, p in players:GetChildren() do
+  playerdata[p.Name] = playerdrop.new(p.DisplayName.. ' ['.. p.Name.. ']')
+end
+
+players.PlayerAdded:Connect(function(p)
+  playerdata[p.Name] = playerdrop.new(p.DisplayName.. ' ['.. p.Name.. ']')
+end)
+
+players.PlayerRemoving:Connect(function(p)
+  playerdata[p.Name].Destroy()
+end)
+
+playerdrop.event:Connect(function(pp)
+  local pname = string.split(pp, '[')[2]
+  local playername = string.sub(pname, 1, #pname - 1)
+  if players[playername] then
+    targetp = playername
+  end
+end)
+
+local kickfeatures = kicktab.new("dropdown", {
+  text = "Teleport Locations"
+})
+
+for i, v in carteleports do
+  kickfeatures.new(i)
+end
+
+local selectedteleport
+kickfeatures.event:Connect(function(name)
+  selectedteleport = carteleports[name]
+end)
+
+local teleportbutton = kicktab.new("button", {
+  text = "Teleport Player"
+})
+
+teleportbutton.event:Connect(function()
+  kickcar(targetp, selectedteleport)
+end)
+
+local robbutton = kicktab.new("button", {
+  text = "Start Mansion Robbery"
+})
+
+robbutton.event:Connect(function()
+  kickcar(targetp, workspace.MansionRobbery.Lobby.EntranceElevator.TouchToEnter)
+end)
+
+local kickbutton = kicktab.new("button", {
+  text = "Kick Player"
+})
+
+kickbutton.event:Connect(function()
+  kickcar(targetp, workspace.ForwardPortal.Door)
+end)
+
+local killbutton = kicktab.new("button", {
+  text = "Kill Player"
+})
+
+killbutton.event:Connect(function()
+  kickcar(targetp, workspace:FindFirstChild("LavaKill", true))
+end)
+
+local iybutton = kicktab.new("button", {
+  text = "Infinite Yield"
+})
+
+iybutton.event:Connect(function()
+  loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+end)
+
+local viewswitch = kicktab.new("switch", {
+  text = "View Player"
+})
+
+local viewing = false
+function viewplayer(state) 
+  viewing = state
+  while viewing do task.wait()
+    if players[targetp] and players[targetp].Character then
+      workspace.Camera.CameraSubject = players[targetp].Character
+    end
+  end
+
+  workspace.Camera.CameraSubject = players.LocalPlayer.Character
+end
+
+viewswitch.event:Connect(viewplayer)
+local hackswitch = kicktab.new("switch", {
+  text = "Hack Player Vehicle"
+})
+
+local SelectedVehicle
+local HackPlayer = false
+hackswitch.event:Connect(function(state)
+  HackPlayer = state
+  if not HackPlayer then return end
+  local ReplicatedStorage = game:GetService('ReplicatedStorage')
+  local VehicleModule = require(ReplicatedStorage.Game.Vehicle)
+  local VehiclePacket = VehicleModule.GetLocalVehiclePacket()
+  local Vehicles = workspace.Vehicles:GetChildren()
+  local Players = game:GetService('Players')
+  local Vehicle = VehiclePacket.Model
+  local Target = Players[targetp]
+
+  function findplayercar(player)
+    for _, v in Vehicles do
+      if v:FindFirstChild("Seat") then
+        for _, v2 in v:GetChildren() do
+          if v2.Name == "Seat" or v2.Name == "Passenger" then
+            if v2.PlayerName.Value == player.Name then
+              return v
+            end
+          end
+        end
+      end
+    end
+  end
+
+  local RopePull = Vehicle.Preset.Crane.MetalHook
+  local Rope = Vehicle.Preset.Crane.Arm.MetalArm.RopeConstraint
+  local TargetVehicle = findplayercar(Target)
+
+  Rope.Length = 10000
+  Rope.WinchEnabled = true
+  while not RopePull.AttachedTo.Value do task.wait()
+    RopePull.CFrame = TargetVehicle.PrimaryPart.CFrame * CFrame.new(0, 1000, 0)
+    RopePull.ReqLink:FireServer(TargetVehicle, Vector3.new(0, 1000, 0))
+  end
+
+  local oldviewing = viewing
+  viewplayer(false)
+
+  local OriginalLocation = Vehicle.PrimaryPart.CFrame
+  workspace.Camera.CameraSubject = TargetVehicle:FindFirstChild("CameraVehicleSeat") or TargetVehicle
+  Players.LocalPlayer.Character.HumanoidRootPart.Weld.Part1 = TargetVehicle.Seat
+
+  local RebuildPacket = {}
+  for i, v in VehiclePacket do
+    RebuildPacket[i] = v
+    VehiclePacket[i] = nil
+  end
+
+  VehiclePacket.Model = TargetVehicle
+  while HackPlayer do task.wait()
+    if not TargetVehicle or not TargetVehicle.PrimaryPart then
+      HackPlayer = false
+      break
+    end
+    
+    RopePull.CFrame = TargetVehicle.PrimaryPart.CFrame * CFrame.new(0, 1000, 0)
+  end
+
+  spawn(viewplayer, oldviewing)
+  for i, v in RebuildPacket do
+    VehiclePacket[i] = v
+  end
+
+  Players.LocalPlayer.Character.HumanoidRootPart.Weld.Part1 = Vehicle.Seat
+  
+  RopePull.CFrame = Vehicle.PrimaryPart.CFrame
+  RopePull.ReqUnlink:FireServer(TargetVehicle, Vector3.new(0, 1000, 0))
+  Rope.WinchEnabled = false
+  Rope.Length = 5
+end)
+
+local c4folder = kicktab2.new("folder", {
+  text = "C4 Exploits"
+})
+
+c4folder.new("dropdown", {
+  text = "Exclusions"
+})
+
+c4folder.new("button", {
+  text = "Kill All Players"
+})
+
+c4folder.new("button", {
+  text = "Kill 6 Nearest Players"
+})
+
+c4folder.new("button", {
+  text = "Break 6 Nearest Players"
+})
+
+c4folder.new("button", {
+  text = "Break 6 Nearest Vehicles"
+})
+
+c4folder.new("button", {
+  text = "Penis 6 Nearest Players"
+})
+
+c4folder.new("button", {
+  text = "Stand Player"
+})
+
+c4folder.new("button", {
+  text = "Kill Player"
+})
+
+c4folder.new("button", {
+  text = "Break Player"
+})
+
+c4folder.new("button", {
+  text = "Give Penis"
+})
+
+c4folder.new("switch", {
+  text = "Loop Kill All"
+})
+
+local exp1 = kicktab2.new("button", {
+  text = "Give EXP-1"
+})
+
+exp1.event:Connect(function()
+  local Goal = workspace.SoccerGoal:GetBoundingBox()
+  workspace.SoccerBall.CFrame = Goal
+end)
+
+local ropedestroy = kicktab2.new("button", {
+  text = "Destroy Ropes"
+})
+
+ropedestroy.event:Connect(function()
+  local Vehicles = workspace.Vehicles:GetChildren()
+  for _, Vehicle in Vehicles do
+    local Hook = Vehicle:FindFirstChild("MetalHook", true) or Vehicle:FindFirstChild("RopePull", true)
+    if Hook then
+      Hook.ReqUnlink:FireServer(Hook.AttachedTo.Value)
+    end
+  end
+end)
+
+mcarlabel = cartab.new("label", {
+  text = "Closest Car Magnitude: Loading..."
+})
+
+carlabel = cartab.new("label", {
+  text = "Closest Car: Loading..."
+})
+
+local presetfolder = cartab.new("folder", {
+  text = "Customisation"
+})
+
+local selectedpreset
+local presets = presetfolder.new("dropdown", {
+  text = "Custom Presets"
+})
+
+if not isfolder('JBPresets') then
+  makefolder('JBPresets')
+end
+
+function getlength(tt)
+  local num = 0
+  for i, v in tt do
+    num += 1
+  end
+
+  return num
+end
+
+local PresetNames = {}
+local PresetObjects = {}
+for _, v in listfiles('JBPresets') do
+  local presetname = string.sub(v, 2, -8)
+  table.insert(PresetNames, presetname)
+  PresetObjects[presetname] = presets.new(presetname)
+end
+
+local GarageCache = {}
+presets.event:Connect(function(name)
+  selectedpreset = name
+end)
+
+local hyperbutton = presetfolder.new("switch", {
+  text = "Hack Customisation"
+})
+
+local loadbutton = presetfolder.new("button", {
+  text = "Load Preset"
+})
+
+local HttpService = game:GetService('HttpService')
+loadbutton.event:Connect(function()
+  local Preset = 'JBPresets/'.. selectedpreset.. '.preset'
+  local encoded = readfile(Preset)
+  GarageCache = HttpService:JSONDecode(encoded)
+end)
+
+local savebutton = presetfolder.new("button", {
+  text = "Update Preset"
+})
+
+savebutton.event:Connect(function()
+  local Preset = 'JBPresets/'.. selectedpreset.. '.preset'
+  local encoded = HttpService:JSONEncode(GarageCache)
+  writefile(Preset, encoded)
+end)
+
+local deletebutton = presetfolder.new("button", {
+  text = "Delete Preset"
+})
+
+deletebutton.event:Connect(function()
+  delfile("JBPresets/".. selectedpreset.. ".preset")
+  local nameindex = table.find(PresetNames, selectedpreset)
+  table.remove(PresetNames, nameindex)
+  local dropdownObject = PresetObjects[selectedpreset]
+  dropdownObject.Destroy()
+  selectedpreset = nil
+end)
+
+local newpbutton = presetfolder.new("button", {
+  text = "Create Presest"
+})
+
+function split(inputstr, sep)
+  if sep == nil then
+    sep = "%s"
+  end
+
+  local t={}
+  for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
+    table.insert(t, str)
+  end
+
+  return t
+end
+
+function GetPresetNumber()
+  local sortNames = {}
+  for i, v in PresetNames do
+    local num = tonumber(split(v, 'preset')[1])
+    sortNames[num] = v
+  end
+
+  local currentNumber = 1
+  for i, v in sortNames do
+    local num = tonumber(split(v, 'preset')[1])
+    if num > currentNumber then
+      break
+    end
+
+    currentNumber += 1
+  end
+
+  return currentNumber
+end
+
+newpbutton.event:Connect(function()
+  local JsonData = HttpService:JSONEncode(GarageCache)
+  local PresetNumber = GetPresetNumber()
+  local PresetName = "preset".. tostring(PresetNumber)
+  local Preset = PresetName.. ".preset"
+
+  writefile("JBPresets/".. Preset, JsonData)
+  table.insert(PresetNames, PresetName)
+
+  local Object = presets.new(PresetName)
+  PresetObjects[PresetName] = Object
+  Object.Select()
+end)
+
+local HackGarage = false
+hyperbutton.event:Connect(function(state)
+  local ReplicatedStorage = game:GetService('ReplicatedStorage')
+  HackGarage = state
+  if not HackGarage then return end
+
+  function UpdateGarage()
+    local Store = require(ReplicatedStorage.App.store)
+    local StoreData = require(ReplicatedStorage.Game.Garage.StoreData)
+    local Categories = debug.getupvalue(StoreData.GetCategoryByName, 1)
+
+    local Items = {}
+    for i, v in pairs(Categories) do
+      Items[i] = {}
+      for _, v2 in pairs(v.Items) do
+        table.insert(Items[i], v2.Name)
+        v2.Hidden = false
+        v2.HiddenAll = false
+      end
+    end
+
+    for i, v in pairs(Items) do
+      if not Store._state.garageOwned[i] then
+        Store._state.garageOwned[i] = {}
+      end
+
+      for _, v2 in pairs(v) do
+        Store._state.garageOwned[i][v2] = true
+      end
+    end
+  end
+
+  function PatchCustomisation()
+    for i, v in GarageCache do
+      ReplicatedStorage.GarageEquipItem:FireServer(i, v)
+    end
+
+    if GarageCache['WheelColor'] then
+      ReplicatedStorage.GarageEquipItem:FireServer('WheelColor', GarageCache['WheelColor'])
+    end
+  end
+
+  UpdateGarage()
+  local FireServer = getrawmetatable(game)
+  local OldFireServer = FireServer.__namecall
+
+  setreadonly(FireServer, false)
+  FireServer.__namecall = function(self, ...)
+    if not HackGarage then return OldFireServer(self, ...) end
+    local method = getnamecallmethod()
+    if typeof(self) == "Instance" and method == "FireServer" then
+      local args = {...}
+      if self.Name == 'GarageEquipItem' then
+        GarageCache[args[1]] = args[2]
+        return OldFireServer(self, ...)
+      end
+
+      if self.Name == 'GarageSetUIOpen' then
+        if args[1] then
+          UpdateGarage()
+          return OldFireServer(self, ...)
+        end
+
+        ReplicatedStorage.GarageSlotLoad:FireServer('s100')
+        local response = OldFireServer(self, ...)
+        PatchCustomisation()
+        return response
+      end
+
+      if self.Name == 'GarageLoadLastSelection' then
+        local response = OldFireServer(self, ...)
+        PatchCustomisation()
+        return response
+      end
+    end
+
+    return OldFireServer(self, ...)
+  end
+
+  setreadonly(FireServer, true)
+end)
+
+cbutton = cartab.new("button", {
+  text = "Enter Car"
+})
+
+cbutton.event:Connect(function()
+  ccar.Callback(ccar, true)
+end)
+
+cartbutton = cartab.new("button", {
+  text = "Teleport to Car"
+})
+
+cartbutton.event:Connect(function()
+  player.CFrame = ccar.ValidRoot.Seat.CFrame * CFrame.new(0, 5, 0)
+end)
+
+spawnbutton = cartab.new("button", {
+  text = "Spawn Car"
+})
+
+local exitbutton = cartab.new("button", {
+  text = "Exit Car"
+})
+
+exitbutton.event:Connect(function()
+  local vehiclemodule = require(replicated.Game.Vehicle)
+  local vehicle = vehiclemodule.GetLocalVehicleModel()
+
+  vehicle:MoveTo(vehicle.PrimaryPart.Position)
+  players.LocalPlayer.Character.PrimaryPart.CFrame *= CFrame.new(0, -10, 0)
+end)
+
+local noclipbutton = cartab.new("button", {
+  text = "Enable Noclip"
+})
+
+noclipbutton.event:Connect(function()
+  local vehiclemodule = require(replicated.Game.Vehicle)
+  local vehicle = vehiclemodule.GetLocalVehicleModel()
+
+  function disablecollision(model)
+    function GetDescendants(object, t)
+      local t = t or {}
+      for _, child in ipairs(object:GetChildren()) do
+        table.insert(t, child)
+        GetDescendants(child, t)
+      end
+      return t
+    end
+
+    for _, v in pairs(GetDescendants(model)) do
+      if v:IsA("BasePart") then
+        v.CanCollide = false
+      end
+    end
+  end
+
+  disablecollision(vehicle)
+end)
+
+local switchbutton1 = cartab.new("button", {
+  text = "Change Perspective"
+})
+
+switchbutton1.event:Connect(function()
+  local currentsubject = workspace.Camera.CameraSubject
+  if currentsubject.Name == "CameraVehicleSeat" then
+    workspace.Camera.CameraSubject = players.LocalPlayer.Character
+    return
+  end
+
+  local vehiclemodule = require(replicated.Game.Vehicle)
+  local vehicle = vehiclemodule.GetLocalVehicleModel()
+  workspace.Camera.CameraSubject = vehicle.CameraVehicleSeat
+end)
+
+spawnbutton.event:Connect(function()
+  spawncar("Camaro")
+end)
+
+local emerb = cartab.new("button", {
+  text = "Emergency Escape"
+})
+
+emerb.event:Connect(function()
+  local storage = game:GetService('ReplicatedStorage')
+  local vehiclemodule = require(storage.Game.Vehicle)
+  local vehicle = vehiclemodule.GetLocalVehicleModel()
+  vehicle.PrimaryPart.CFrame *= CFrame.new(0, 1000, 0)
+end)
+
+local tpplayerbutton = cartab.new("button", {
+  text = "Teleport to Player"
+})
+
+tpplayerbutton.event:Connect(function()
+  local vehiclemodule = require(replicated.Game.Vehicle)
+  local vehicle = vehiclemodule.GetLocalVehicleModel()
+  vehicle:PivotTo(players.LocalPlayer.Character.PrimaryPart.CFrame)
+end)
+
+local currentcolor = Color3.new(0, 0, 1)
+local colorpicker = tptab.new("color", {
+    text = "Crew Color"
+})
+
+colorpicker.event:Connect(function(color)
+    currentcolor = color
+end)
+
+local colorbutton = tptab.new("button", {
+    text = "Set Crew Color"
+})
+
+colorbutton.event:Connect(function()
+    game:GetService('ReplicatedStorage').UpdateClanFlagColor:FireServer(currentcolor)
+end)
+
+local tpfolder = tptab.new("folder", { text = "Instant Teleport Menu" })
+
+tpfolder.open()
+local ebutton = tpfolder.new("button", {
+  text = "Open Mansion"
+})
+
+ebutton.event:Connect(function()
+  local elevator = workspace.MansionRobbery.ArrivalElevator.Car.Rail
+  elevator = elevator.Position + Vector3.new(0, 10, 0)
+  
+  for i = 1, 64 do
+    task.wait()
+    player.CFrame = CFrame.new(elevator)
+  end
+end)
+
+local bswitch = tpfolder.new("switch", {
+  text = "Mansion Boss"
+})
+
+local tpbosschecked = false
+function tpboss()
+  local boss
+  if workspace:FindFirstChild("ActiveBoss") then
+    boss = workspace.ActiveBoss
+  else
+    boss = workspace.MansionRobbery.ActiveBoss
+  end
+  
+  while tpbosschecked do wait()
+    player.CFrame = boss.Head.CFrame
+  end
+end
+
+bswitch.event:Connect(function(checked)
+  tpbosschecked = checked
+  spawn(tpboss)
+end)
+
+poslabel = position.new("label", {
+  text = "Current Position: Loading..."
+})
+
+position.new("label", {
+  text = ""
+})
+
+local folder = position.new("folder", {
+  text = "Modify Waypoints"
+})
+
+local addbutton = folder.new("button", {
+  text = "Add Waypoint"
+})
+
+addbutton.event:Connect(function()
+  if not waypointsfolder.isopen then
+    waypointsfolder.open()
+  end
+
+  addwaypoint(player.Position + relativePosition)
+end)
+
+local delbutton = folder.new("button", {
+  text = "Remove Waypoint"
+})
+
+delbutton.event:Connect(function()
+  delwaypoint()
+end)
+
+local buildbutton = folder.new("button", {
+  text = "Build Script"
+})
+
+buildbutton.event:Connect(function()
+  setclipboard(buildscript())
+end)
+
+local testbutton = folder.new("button", {
+  text = "Test Waypoints"
+})
+
+testbutton.event:Connect(function()
+  local player = game:GetService('Players').LocalPlayer.Character
+  local state = player.Humanoid:GetState()
+  for _, v in waypoints do
+    local TweenService = game:GetService('TweenService')
+    player.Humanoid:ChangeState(11)
+    tween = TweenService:Create(player.HumanoidRootPart, TweenInfo.new((player.HumanoidRootPart.Position - v).Magnitude / 100, Enum.EasingStyle.Linear), {CFrame = CFrame.new(v)})
+    tween:Play()
+    tween.Completed:Wait()
+  end
+
+  player.Humanoid:ChangeState(state)
+end)
+
+local backbutton = folder.new("button", {
+  text = "Test Reverse Direction"
+})
+
+backbutton.event:Connect(function()
+  local player = game:GetService('Players').LocalPlayer.Character
+  local state = player.Humanoid:GetState()
+  for i = #waypoints, 0, -1 do
+    local v = waypoints[i]
+    local TweenService = game:GetService('TweenService')
+    player.Humanoid:ChangeState(11)
+    tween = TweenService:Create(player.HumanoidRootPart, TweenInfo.new((player.HumanoidRootPart.Position - v).Magnitude / 100, Enum.EasingStyle.Linear), {CFrame = CFrame.new(v)})
+    tween:Play()
+    tween.Completed:Wait()
+  end
+
+  player.Humanoid:ChangeState(state)
+end)
+
+local delallbutton = folder.new("button", {
+  text = "Remove All Waypoints"
+})
+
+delallbutton.event:Connect(function()
+  for i = 1, #waypoints do
+    delwaypoint()
+  end
+end)
+
+folder.open()
+local offsetfolder = position.new("folder", {
+  text = "Offset Waypoints"
+})
+
+local xSlider = offsetfolder.new("slider", {
+  text = "X",
+  max = 50
+})
+
+xSlider.event:Connect(function(num)
+  relativePosition = Vector3.new(num, relativePosition.Y, relativePosition.Z)
+end)
+
+local ySlider = offsetfolder.new("slider", {
+  text = "Y",
+  max = 50
+})
+
+ySlider.event:Connect(function(num)
+  relativePosition = Vector3.new(relativePosition.X, num, relativePosition.Z)
+end)
+
+local zSlider = offsetfolder.new("slider", {
+  text = "Z",
+  max = 50
+})
+
+zSlider.event:Connect(function(num)
+  relativePosition = Vector3.new(relativePosition.X, relativePosition.Y, num)
+end)
+
+waypointsfolder = position.new("folder", {
+  text = "Waypoints [0]"
+})
+
+while coregui:FindFirstChild("imgui2"):FindFirstChild("Main") do wait()
+  if not players.LocalPlayer.Character or not players.LocalPlayer.Character.PrimaryPart then
+    continue
+  end
+
+  local player = players.LocalPlayer.Character.HumanoidRootPart
+  x = math.floor(player.Position.X)
+  y = math.floor(player.Position.Y)
+  z = math.floor(player.Position.Z)
+  player = game:GetService('Players').LocalPlayer.Character.HumanoidRootPart
+  poslabel.setText("Current Position: ".. x.. ", ".. y.. ", ".. z)
+  ccar = GetClosestCar()
+  mag = math.floor((ccar.ValidRoot.Seat.Position - player.Position).Magnitude)
+  mcarlabel.setText("Closest Car Magnitude: ".. mag)
+  if mag < 64 then
+    mcarlabel.setColor(Color3.fromHex("#00FF00"))
+  else
+    mcarlabel.setColor(Color3.fromHex("#FF0000"))
+  end
+
+  carlabel.setText("Closest Car: ".. ccar.ValidRoot.Name)
+  waypointsfolder.self.Folder.Title.Text = "Waypoints [".. tostring(#waypoints).. "]"
+end
